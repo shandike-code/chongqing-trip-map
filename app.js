@@ -16,16 +16,16 @@ function latlng(p){return p.wgs&&!state.resolved[p.id]?p.wgs:gcjToWgs(p.lng,p.la
 function wgsToGcj(lng,lat){let x=lng,y=lat;for(let i=0;i<4;i++){const [ay,ax]=gcjToWgs(x,y);x+=lng-ax;y+=lat-ay}return [x,y]}
 for(const p of PLACES){if(p.wgs){[p.lng,p.lat]=wgsToGcj(p.wgs[1],p.wgs[0])}}
 function startMap(){if(!window.L){$('#mapStatus').textContent='地图库未加载，地点清单仍可用';return}map=L.map('map',{zoomControl:false}).setView(gcjToWgs(106.565,29.56),13);L.control.zoom({position:'topright'}).addTo(map);const attribution='© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>';
-const layers={
- '浅色地图':L.tileLayer('https://basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png',{maxZoom:19,attribution:attribution+' · © <a href="https://carto.com/attributions" target="_blank" rel="noopener">CARTO</a>'}),
- '标准地图':L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution})
-};
-for(const layer of Object.values(layers)){
- layer.on('tileload',()=>{if(map.hasLayer(layer))$('#mapStatus').textContent='拖动探索 · 点击聚合点放大'});
- layer.on('tileerror',()=>{if(map.hasLayer(layer))$('#mapStatus').textContent='底图加载失败，可用右侧图层按钮切换地图'});
-}
-layers['浅色地图'].addTo(map);
-L.control.layers(layers,null,{position:'topright'}).addTo(map);
+let loaded=0,failed=0;
+const base=L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution});
+const status=$('#mapStatus');
+status.textContent='正在加载地图…';
+base.on('tileload',()=>{loaded++;status.textContent=failed?'部分底图加载失败，可点击重试':'拖动探索 · 点击聚合点放大'});
+base.on('tileerror',()=>{failed++;status.textContent='底图连接失败 · 点击此处重试（无需高德 Key）'});
+status.style.cursor='pointer';status.title='点击重新加载底图';
+status.onclick=()=>{loaded=0;failed=0;status.textContent='正在重试加载地图…';base.redraw()};
+base.addTo(map);
+setTimeout(()=>{if(!loaded)status.textContent='底图尚未加载 · 点击此处重试（无需高德 Key）'},12000);
 clusters=L.markerClusterGroup({maxClusterRadius:45,showCoverageOnHover:false,spiderfyOnMaxZoom:true,iconCreateFunction:c=>L.divIcon({html:String(c.getChildCount()),className:'cluster',iconSize:[42,42]})}).addTo(map);lines=L.layerGroup().addTo(map);new ResizeObserver(()=>map.invalidateSize()).observe($('#map'));}
 function filtered(){return PLACES.map(p=>place(p.id)).filter(p=>(category==='all'||p.cat===category)&&(!region||p.area===region)&&(!query||(p.name+p.note+p.area+p.address).toLowerCase().includes(query.toLowerCase())))}
 function renderMap(){if(!map)return;clusters.clearLayers();markers={};for(const p of filtered()){if(p.lng==null)continue;const idx=state.days[day<3?day:0].indexOf(p.id);const mark=L.marker(latlng(p),{title:p.name,icon:L.divIcon({className:'marker-wrap',html:`<div class="pin ${p.precision==='poi'?'':'approx'}" style="--pin:${CATS[p.cat][1]}"><span>${view==='plan'&&idx>=0?idx+1:ICONS[p.cat]}</span></div>`,iconSize:[30,35],iconAnchor:[15,32]})}).bindTooltip(esc(p.name));mark.on('click',()=>showDetail(p.id));markers[p.id]=mark;clusters.addLayer(mark)}drawLines()}
